@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sudoku">
+<meta name="theme-color" content="#1a1a2e">
+<title>Sudoku</title>
+<style>
+:root {
+  --bg:          #1a1a2e;
+  --hdr:         #16213e;
+  --cell-bg:     #ffffff;
+  --cell-given:  #e8e8f0;
+  --cell-sel:    #bbdefb;
+  --cell-rel:    #e3f2fd;
+  --cell-same:   #fff9c4;
+  --cell-err:    #ffcdd2;
+  --cell-errsel: #ef9a9a;
+  --line-thin:   #c0c0d0;
+  --line-thick:  #444466;
+  --txt-given:   #1a1a2e;
+  --txt-user:    #1565c0;
+  --txt-note:    #888;
+  --txt-err:     #c62828;
+  --accent:      #e94560;
+  --btn-bg:      #16213e;
+  --btn-act:     #533483;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  font-family: Georgia, serif;
+  height: 100vh; height: 100dvh;
+  overflow: hidden;
+  user-select: none; -webkit-user-select: none;
+  touch-action: none;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ── Header ─────────────────────────────────────────── */
+#hdr {
+  background: var(--hdr);
+  color: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  height: 48px;
+  flex-shrink: 0;
+}
+#hdr h1 { font-size: 18px; }
+#hdr-mid { font-size: 13px; text-align: center; flex: 1; }
+#btn-new {
+  background: var(--accent); border: none; color: #fff;
+  padding: 6px 12px; border-radius: 7px; font-size: 13px;
+  font-weight: bold; cursor: pointer;
+}
+
+/* ── Main layout ────────────────────────────────────── */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+/* ── Board ──────────────────────────────────────────── */
+#board {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  border: 3px solid var(--line-thick);
+  border-radius: 5px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cell {
+  background: var(--cell-bg);
+  border-right: 1px solid var(--line-thin);
+  border-bottom: 1px solid var(--line-thin);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.08s;
+}
+.cell[data-c="8"] { border-right: none; }
+.cell[data-r="8"] { border-bottom: none; }
+.cell[data-c="2"], .cell[data-c="5"] { border-right: 2px solid var(--line-thick); }
+.cell[data-r="2"], .cell[data-r="5"] { border-bottom: 2px solid var(--line-thick); }
+
+.cell.given    { background: var(--cell-given); }
+.cell.sel      { background: var(--cell-sel) !important; }
+.cell.rel      { background: var(--cell-rel); }
+.cell.same-num { background: var(--cell-same); }
+.cell.err      { background: var(--cell-err); }
+.cell.err.sel  { background: var(--cell-errsel) !important; }
+
+.cell-val {
+  font-weight: bold;
+  line-height: 1;
+  color: var(--txt-given);
+  pointer-events: none;
+}
+.cell.user .cell-val  { color: var(--txt-user); }
+.cell.err .cell-val   { color: var(--txt-err); }
+
+.cell-notes {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  grid-template-rows: repeat(3,1fr);
+  width: 100%; height: 100%;
+  padding: 1px;
+  pointer-events: none;
+}
+.note-n {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--txt-note);
+  line-height: 1;
+}
+
+/* ── Controls ───────────────────────────────────────── */
+#controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Difficulty row */
+#diff-row {
+  display: flex; gap: 6px;
+}
+.diff-btn {
+  background: var(--btn-bg);
+  border: 1px solid #0f3460;
+  color: #aaa;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.diff-btn.active { border-color: var(--accent); color: var(--accent); font-weight: bold; }
+
+/* Tool row */
+#tool-row {
+  display: flex; gap: 8px;
+}
+.tool-btn {
+  background: var(--btn-bg);
+  border: 2px solid #0f3460;
+  color: #ccc;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tool-btn.active { background: var(--btn-act); border-color: #a070d0; color: #fff; }
+
+/* Numpad */
+#numpad {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 6px;
+  width: 100%;
+  max-width: 460px;
+}
+.num-btn {
+  background: var(--btn-bg);
+  border: none;
+  color: #e0e0e0;
+  border-radius: 8px;
+  font-size: 1.4em;
+  font-weight: bold;
+  aspect-ratio: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.num-btn:active   { background: var(--btn-act); }
+.num-btn.complete { opacity: 0.25; pointer-events: none; }
+
+/* ── Landscape ──────────────────────────────────────── */
+@media (orientation: landscape) {
+  #main { flex-direction: row; align-items: center; justify-content: center; gap: 16px; }
+  #controls { width: auto; min-width: 180px; }
+  #numpad {
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 200px;
+    gap: 8px;
+  }
+  .num-btn { font-size: 1.2em; }
+}
+
+/* ── Win overlay ────────────────────────────────────── */
+#win {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.78);
+  z-index: 999;
+  align-items: center; justify-content: center; flex-direction: column;
+  color: #fff; text-align: center; gap: 18px;
+}
+#win.show { display: flex; }
+#win h2   { font-size: 38px; }
+#win p    { font-size: 16px; opacity: 0.85; }
+#win button {
+  background: var(--accent); border: none;
+  padding: 14px 34px; border-radius: 10px;
+  font-size: 18px; font-weight: bold; color: #fff; cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <h1>✦ Sudoku</h1>
+  <div id="hdr-mid"><span id="tm">0:00</span></div>
+  <button id="btn-new">New Game</button>
+</div>
+
+<div id="main">
+  <div id="board"></div>
+  <div id="controls">
+    <div id="diff-row">
+      <button class="diff-btn active" data-d="easy">Easy</button>
+      <button class="diff-btn" data-d="medium">Medium</button>
+      <button class="diff-btn" data-d="hard">Hard</button>
+      <button class="diff-btn" data-d="expert">Expert</button>
+    </div>
+    <div id="tool-row">
+      <button class="tool-btn active" id="btn-normal">✏ Fill</button>
+      <button class="tool-btn" id="btn-notes">📝 Notes</button>
+      <button class="tool-btn" id="btn-erase">⌫ Erase</button>
+    </div>
+    <div id="numpad"></div>
+  </div>
+</div>
+
+<div id="win">
+  <h2>🎉 Solved!</h2>
+  <p id="win-stats"></p>
+  <button id="win-btn">Play Again</button>
+</div>
+
+<script>
+// ── Sudoku generation ──────────────────────────────────────────────
+const BASE = [
+  [1,2,3,4,5,6,7,8,9],[4,5,6,7,8,9,1,2,3],[7,8,9,1,2,3,4,5,6],
+  [2,3,4,5,6,7,8,9,1],[5,6,7,8,9,1,2,3,4],[8,9,1,2,3,4,5,6,7],
+  [3,4,5,6,7,8,9,1,2],[6,7,8,9,1,2,3,4,5],[9,1,2,3,4,5,6,7,8]
+];
+
+function shuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=0|Math.random()*(i+1);[b[i],b[j]]=[b[j],b[i]];} return b; }
+function transpose(g){ return g[0].map((_,c)=>g.map(r=>r[c])); }
+
+function generateSolution(){
+  let g=BASE.map(r=>[...r]);
+  for(let b=0;b<3;b++){const o=shuffle([0,1,2]);const t=o.map(i=>g[b*3+i]);for(let i=0;i<3;i++)g[b*3+i]=t[i];}
+  let gt=transpose(g);
+  for(let b=0;b<3;b++){const o=shuffle([0,1,2]);const t=o.map(i=>gt[b*3+i]);for(let i=0;i<3;i++)gt[b*3+i]=t[i];}
+  g=transpose(gt);
+  const bands=shuffle([0,1,2]); g=bands.flatMap(b=>[g[b*3],g[b*3+1],g[b*3+2]]);
+  gt=transpose(g); const stacks=shuffle([0,1,2]); gt=stacks.flatMap(s=>[gt[s*3],gt[s*3+1],gt[s*3+2]]); g=transpose(gt);
+  const perm=shuffle([1,2,3,4,5,6,7,8,9]);
+  return g.map(row=>row.map(v=>perm[v-1]));
+}
+
+function countSolutions(grid,max=2){
+  const g=grid.map(r=>[...r]);
+  let count=0;
+  function ok(r,c,n){
+    for(let i=0;i<9;i++) if(g[r][i]===n||g[i][c]===n) return false;
+    const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;
+    for(let dr=0;dr<3;dr++) for(let dc=0;dc<3;dc++) if(g[br+dr][bc+dc]===n) return false;
+    return true;
+  }
+  function solve(){
+    let row=-1,col=-1;
+    outer:for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(!g[r][c]){row=r;col=c;break outer;}
+    if(row===-1){count++;return count>=max;}
+    for(let n=1;n<=9;n++) if(ok(row,col,n)){g[row][col]=n;if(solve())return true;g[row][col]=0;}
+    return false;
+  }
+  solve(); return count;
+}
+
+const CLUES={easy:42,medium:34,hard:28,expert:23};
+
+function generatePuzzle(diff){
+  const solution=generateSolution();
+  const puzzle=solution.map(r=>[...r]);
+  const cells=shuffle([...Array(81).keys()]);
+  let removed=0; const target=81-CLUES[diff];
+  for(const idx of cells){
+    if(removed>=target) break;
+    const r=Math.floor(idx/9),c=idx%9;
+    const val=puzzle[r][c];
+    puzzle[r][c]=0;
+    if(countSolutions(puzzle)===1) removed++;
+    else puzzle[r][c]=val;
+  }
+  return {puzzle,solution};
+}
+
+// ── State ──────────────────────────────────────────────────────────
+let board=[],solution=[],given=[],notes=[];
+let sel=null, notesMode=false;
+let secs=0,timerID=null,diff='easy';
+
+function newGame(d){
+  diff=d||diff;
+  clearInterval(timerID); secs=0; updateTimer();
+  document.getElementById('win').classList.remove('show');
+  document.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b.dataset.d===diff));
+
+  // Generate in next tick so UI can repaint first
+  setTimeout(()=>{
+    const gen=generatePuzzle(diff);
+    board=gen.puzzle; solution=gen.solution;
+    given=gen.puzzle.map(r=>r.map(v=>v!==0));
+    notes=Array(9).fill(null).map(()=>Array(9).fill(null).map(()=>new Set()));
+    sel=null;
+    timerID=setInterval(()=>{secs++;updateTimer();},1000);
+    render();
+  },0);
+}
+
+function fmtT(s){return `${0|s/60}:${String(s%60).padStart(2,'0')}`;}
+function updateTimer(){document.getElementById('tm').textContent=fmtT(secs);}
+
+// ── Render ─────────────────────────────────────────────────────────
+function boardSize(){
+  const main=document.getElementById('main').getBoundingClientRect();
+  const land=window.innerWidth>window.innerHeight;
+  let sz;
+  if(land){
+    sz=Math.min(main.height-16, main.width*0.52);
+  } else {
+    sz=Math.min(main.width-16, main.height*0.56);
+  }
+  return Math.floor(sz/9)*9;
+}
+
+function render(){
+  if(!board.length) return;
+  const el=document.getElementById('board');
+  const sz=boardSize();
+  el.style.width=sz+'px'; el.style.height=sz+'px';
+  const cs=sz/9;
+  const valSz=Math.max(12,Math.floor(cs*0.52));
+  const noteSz=Math.max(7,Math.floor(cs/3.6));
+
+  const sr=sel?.r, sc_=sel?.c;
+  const selVal=(sr!=null&&board[sr][sc_])?board[sr][sc_]:null;
+
+  el.innerHTML='';
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
+      const div=document.createElement('div');
+      div.className='cell';
+      div.dataset.r=r; div.dataset.c=c;
+
+      const isSel=sr===r&&sc_===c;
+      const isRel=sr!=null&&(r===sr||c===sc_||
+        (Math.floor(r/3)===Math.floor(sr/3)&&Math.floor(c/3)===Math.floor(sc_/3)));
+      const val=board[r][c];
+      const isGiven=given[r][c];
+      const isErr=!isGiven&&val!==0&&val!==solution[r][c];
+      const isSame=selVal&&val===selVal&&!isSel;
+
+      if(isGiven)  div.classList.add('given');
+      if(isSel)    div.classList.add('sel');
+      else if(isRel) div.classList.add('rel');
+      if(isSame)   div.classList.add('same-num');
+      if(isErr)    div.classList.add('err');
+      if(!isGiven&&val) div.classList.add('user');
+
+      if(val){
+        const v=document.createElement('div');
+        v.className='cell-val';
+        v.style.fontSize=valSz+'px';
+        v.textContent=val;
+        div.appendChild(v);
+      } else {
+        const ns=notes[r][c];
+        if(ns.size){
+          const ng=document.createElement('div');
+          ng.className='cell-notes';
+          for(let n=1;n<=9;n++){
+            const nd=document.createElement('div');
+            nd.className='note-n';
+            nd.style.fontSize=noteSz+'px';
+            nd.textContent=ns.has(n)?n:'';
+            ng.appendChild(nd);
+          }
+          div.appendChild(ng);
+        }
+      }
+
+      div.addEventListener('pointerdown',()=>{sel={r,c};render();});
+      el.appendChild(div);
+    }
+  }
+  updateNumpad();
+}
+
+function updateNumpad(){
+  const counts=Array(10).fill(0);
+  for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(board[r][c]) counts[board[r][c]]++;
+  document.querySelectorAll('.num-btn').forEach((btn,i)=>{
+    btn.classList.toggle('complete', counts[i+1]>=9);
+  });
+}
+
+// ── Input ──────────────────────────────────────────────────────────
+function inputNum(n){
+  if(!sel) return;
+  const {r,c}=sel;
+  if(given[r][c]) return;
+  if(notesMode){
+    if(n===0){notes[r][c].clear();}
+    else if(notes[r][c].has(n)) notes[r][c].delete(n);
+    else { notes[r][c].add(n); board[r][c]=0; }
+  } else {
+    board[r][c]=n;
+    if(n!==0){
+      // Clear notes of same number in row, col, box
+      for(let i=0;i<9;i++){notes[r][i].delete(n);notes[i][c].delete(n);}
+      const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;
+      for(let dr=0;dr<3;dr++) for(let dc=0;dc<3;dc++) notes[br+dr][bc+dc].delete(n);
+    }
+    notes[r][c].clear();
+  }
+  render();
+  checkWin();
+}
+
+function checkWin(){
+  for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(board[r][c]!==solution[r][c]) return;
+  clearInterval(timerID);
+  const d=diff.charAt(0).toUpperCase()+diff.slice(1);
+  document.getElementById('win-stats').textContent=`${d} · ${fmtT(secs)}`;
+  document.getElementById('win').classList.add('show');
+}
+
+// ── Keyboard support ───────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9'){inputNum(parseInt(e.key));return;}
+  if(e.key==='Backspace'||e.key==='Delete'||e.key==='0'){inputNum(0);return;}
+  if(e.key==='n'||e.key==='N'){toggleNotes();return;}
+  if(!sel) return;
+  const {r,c}=sel;
+  if(e.key==='ArrowUp'    &&r>0){sel={r:r-1,c};render();}
+  if(e.key==='ArrowDown'  &&r<8){sel={r:r+1,c};render();}
+  if(e.key==='ArrowLeft'  &&c>0){sel={r,c:c-1};render();}
+  if(e.key==='ArrowRight' &&c<8){sel={r,c:c+1};render();}
+});
+
+// ── Numpad ─────────────────────────────────────────────────────────
+function buildNumpad(){
+  const np=document.getElementById('numpad');
+  for(let n=1;n<=9;n++){
+    const btn=document.createElement('button');
+    btn.className='num-btn'; btn.textContent=n;
+    btn.addEventListener('pointerdown',e=>{e.preventDefault();inputNum(n);});
+    np.appendChild(btn);
+  }
+}
+
+// ── Tools ──────────────────────────────────────────────────────────
+function toggleNotes(){
+  notesMode=!notesMode;
+  document.getElementById('btn-normal').classList.toggle('active',!notesMode);
+  document.getElementById('btn-notes').classList.toggle('active',notesMode);
+}
+document.getElementById('btn-normal').addEventListener('click',()=>{notesMode=false;document.getElementById('btn-normal').classList.add('active');document.getElementById('btn-notes').classList.remove('active');});
+document.getElementById('btn-notes').addEventListener('click',()=>{notesMode=true;document.getElementById('btn-notes').classList.add('active');document.getElementById('btn-normal').classList.remove('active');});
+document.getElementById('btn-erase').addEventListener('click',()=>inputNum(0));
+document.getElementById('btn-new').addEventListener('click',()=>newGame());
+document.getElementById('win-btn').addEventListener('click',()=>newGame());
+document.querySelectorAll('.diff-btn').forEach(b=>b.addEventListener('click',()=>newGame(b.dataset.d)));
+window.addEventListener('resize',()=>render());
+
+// ── Home screen icon ───────────────────────────────────────────────
+(function(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=180;
+  const x=cv.getContext('2d');
+  x.fillStyle='#1a1a2e'; x.fillRect(0,0,180,180);
+  x.strokeStyle='#533483'; x.lineWidth=1.5;
+  for(let i=1;i<9;i++){
+    if(i%3===0){x.strokeStyle='#e94560';x.lineWidth=3;}
+    else{x.strokeStyle='#533483';x.lineWidth=1.5;}
+    const p=10+i*160/9;
+    x.beginPath();x.moveTo(p,10);x.lineTo(p,170);x.stroke();
+    x.beginPath();x.moveTo(10,p);x.lineTo(170,p);x.stroke();
+  }
+  x.strokeStyle='#e94560';x.lineWidth=4;x.strokeRect(10,10,160,160);
+  const digits=[[0,0,5],[0,1,3],[0,2,7],[1,0,6],[1,1,1],[1,2,4],[2,0,8],[2,1,9],[2,2,2]];
+  x.fillStyle='#e0e0e0'; x.font='bold 18px Georgia'; x.textAlign='center'; x.textBaseline='middle';
+  const cw=160/9;
+  for(const [br,bc,v] of digits){
+    const cx=10+bc*cw*3+cw*1.5, cy=10+br*cw*3+cw*1.5;
+    x.fillText(v,cx,cy);
+  }
+  const lnk=document.createElement('link');lnk.rel='apple-touch-icon';lnk.href=cv.toDataURL();
+  document.head.appendChild(lnk);
+})();
+
+// ── Start ──────────────────────────────────────────────────────────
+buildNumpad();
+window.addEventListener('load',()=>newGame('easy'));
+</script>
+</body>
+</html>
