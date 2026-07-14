@@ -145,9 +145,7 @@ body {
 }
 
 /* Difficulty row */
-#diff-row {
-  display: flex; gap: 6px;
-}
+#diff-row { display: flex; gap: 6px; }
 .diff-btn {
   background: var(--btn-bg);
   border: 1px solid #0f3460;
@@ -160,9 +158,7 @@ body {
 .diff-btn.active { border-color: var(--accent); color: var(--accent); font-weight: bold; }
 
 /* Tool row */
-#tool-row {
-  display: flex; gap: 8px;
-}
+#tool-row { display: flex; gap: 8px; }
 .tool-btn {
   background: var(--btn-bg);
   border: 2px solid #0f3460;
@@ -173,6 +169,7 @@ body {
   cursor: pointer;
 }
 .tool-btn.active { background: var(--btn-act); border-color: #a070d0; color: #fff; }
+.tool-btn:disabled { opacity: 0.3; pointer-events: none; }
 
 /* Numpad */
 #numpad {
@@ -208,6 +205,35 @@ body {
   }
   .num-btn { font-size: 1.2em; }
 }
+
+/* ── Confirm dialog ─────────────────────────────────── */
+#confirm {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 1000;
+  align-items: center; justify-content: center;
+}
+#confirm.show { display: flex; }
+#confirm-box {
+  background: #16213e;
+  border: 2px solid #533483;
+  border-radius: 14px;
+  padding: 28px 32px;
+  text-align: center;
+  color: #e0e0e0;
+  display: flex; flex-direction: column; gap: 16px;
+  min-width: 260px;
+}
+#confirm-box h3 { font-size: 20px; }
+#confirm-box p  { font-size: 14px; color: #aaa; }
+#confirm-btns   { display: flex; gap: 12px; justify-content: center; }
+#confirm-btns button {
+  padding: 10px 28px; border-radius: 9px; border: none;
+  font-size: 16px; font-weight: bold; cursor: pointer;
+}
+#confirm-yes { background: var(--accent); color: #fff; }
+#confirm-no  { background: #2a2a4a; color: #ccc; border: 1px solid #444; }
 
 /* ── Win overlay ────────────────────────────────────── */
 #win {
@@ -248,9 +274,22 @@ body {
     <div id="tool-row">
       <button class="tool-btn active" id="btn-normal">✏ Fill</button>
       <button class="tool-btn" id="btn-notes">📝 Notes</button>
+      <button class="tool-btn" id="btn-undo" disabled>↩ Undo</button>
       <button class="tool-btn" id="btn-erase">⌫ Erase</button>
     </div>
     <div id="numpad"></div>
+  </div>
+</div>
+
+<!-- Confirm new game dialog -->
+<div id="confirm">
+  <div id="confirm-box">
+    <h3>Start a new game?</h3>
+    <p id="confirm-sub"></p>
+    <div id="confirm-btns">
+      <button id="confirm-yes">Yes</button>
+      <button id="confirm-no">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -321,25 +360,85 @@ function generatePuzzle(diff){
 }
 
 // ── State ──────────────────────────────────────────────────────────
-let board=[],solution=[],given=[],notes=[];
+let board=[],solution=[],given=[],notes=[],hist=[];
 let sel=null, notesMode=false;
 let secs=0,timerID=null,diff='easy';
+
+// ── Persistence ────────────────────────────────────────────────────
+function saveState(){
+  try {
+    localStorage.setItem('sudoku_v1', JSON.stringify({
+      board, solution, given,
+      notes: notes.map(row=>row.map(s=>[...s])),
+      hist:  hist.map(h=>({board:h.board, notes:h.notes.map(row=>row.map(s=>[...s]))})),
+      secs, diff, notesMode
+    }));
+  } catch(e){}
+}
+
+function loadState(){
+  try {
+    const raw=localStorage.getItem('sudoku_v1');
+    if(!raw) return false;
+    const s=JSON.parse(raw);
+    board=s.board; solution=s.solution; given=s.given;
+    notes=s.notes.map(row=>row.map(a=>new Set(a)));
+    hist=s.hist.map(h=>({board:h.board, notes:h.notes.map(row=>row.map(a=>new Set(a)))}));
+    secs=s.secs; diff=s.diff; notesMode=s.notesMode||false;
+    return true;
+  } catch(e){ return false; }
+}
+
+// ── Undo history ───────────────────────────────────────────────────
+function snap(){
+  hist.push({
+    board: board.map(r=>[...r]),
+    notes: notes.map(row=>row.map(s=>new Set(s)))
+  });
+  if(hist.length>60) hist.shift();
+}
+
+function undo(){
+  if(!hist.length) return;
+  const s=hist.pop();
+  board=s.board; notes=s.notes;
+  render(); saveState();
+}
+
+// ── New game / confirm dialog ──────────────────────────────────────
+let pendingDiff=null;
+
+function requestNewGame(d){
+  pendingDiff=d||diff;
+  const label=pendingDiff.charAt(0).toUpperCase()+pendingDiff.slice(1);
+  document.getElementById('confirm-sub').textContent=
+    `Difficulty: ${label}`;
+  document.getElementById('confirm').classList.add('show');
+}
+
+function confirmYes(){
+  document.getElementById('confirm').classList.remove('show');
+  newGame(pendingDiff);
+}
 
 function newGame(d){
   diff=d||diff;
   clearInterval(timerID); secs=0; updateTimer();
+  hist=[];
   document.getElementById('win').classList.remove('show');
   document.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b.dataset.d===diff));
+  document.getElementById('btn-normal').classList.add('active');
+  document.getElementById('btn-notes').classList.remove('active');
+  notesMode=false;
 
-  // Generate in next tick so UI can repaint first
   setTimeout(()=>{
     const gen=generatePuzzle(diff);
     board=gen.puzzle; solution=gen.solution;
     given=gen.puzzle.map(r=>r.map(v=>v!==0));
     notes=Array(9).fill(null).map(()=>Array(9).fill(null).map(()=>new Set()));
     sel=null;
-    timerID=setInterval(()=>{secs++;updateTimer();},1000);
-    render();
+    timerID=setInterval(()=>{secs++;updateTimer();saveState();},1000);
+    render(); saveState();
   },0);
 }
 
@@ -351,11 +450,8 @@ function boardSize(){
   const main=document.getElementById('main').getBoundingClientRect();
   const land=window.innerWidth>window.innerHeight;
   let sz;
-  if(land){
-    sz=Math.min(main.height-16, main.width*0.52);
-  } else {
-    sz=Math.min(main.width-16, main.height*0.56);
-  }
+  if(land){ sz=Math.min(main.height-16,main.width*0.52); }
+  else     { sz=Math.min(main.width-16,main.height*0.56); }
   return Math.floor(sz/9)*9;
 }
 
@@ -386,11 +482,11 @@ function render(){
       const isErr=!isGiven&&val!==0&&val!==solution[r][c];
       const isSame=selVal&&val===selVal&&!isSel;
 
-      if(isGiven)  div.classList.add('given');
-      if(isSel)    div.classList.add('sel');
+      if(isGiven)    div.classList.add('given');
+      if(isSel)      div.classList.add('sel');
       else if(isRel) div.classList.add('rel');
-      if(isSame)   div.classList.add('same-num');
-      if(isErr)    div.classList.add('err');
+      if(isSame)     div.classList.add('same-num');
+      if(isErr)      div.classList.add('err');
       if(!isGiven&&val) div.classList.add('user');
 
       if(val){
@@ -420,13 +516,14 @@ function render(){
     }
   }
   updateNumpad();
+  document.getElementById('btn-undo').disabled=hist.length===0;
 }
 
 function updateNumpad(){
   const counts=Array(10).fill(0);
   for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(board[r][c]) counts[board[r][c]]++;
   document.querySelectorAll('.num-btn').forEach((btn,i)=>{
-    btn.classList.toggle('complete', counts[i+1]>=9);
+    btn.classList.toggle('complete',counts[i+1]>=9);
   });
 }
 
@@ -435,43 +532,44 @@ function inputNum(n){
   if(!sel) return;
   const {r,c}=sel;
   if(given[r][c]) return;
+  snap();
   if(notesMode){
-    if(n===0){notes[r][c].clear();}
+    if(n===0){ notes[r][c].clear(); }
     else if(notes[r][c].has(n)) notes[r][c].delete(n);
     else { notes[r][c].add(n); board[r][c]=0; }
   } else {
     board[r][c]=n;
     if(n!==0){
-      // Clear notes of same number in row, col, box
       for(let i=0;i<9;i++){notes[r][i].delete(n);notes[i][c].delete(n);}
       const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;
       for(let dr=0;dr<3;dr++) for(let dc=0;dc<3;dc++) notes[br+dr][bc+dc].delete(n);
     }
     notes[r][c].clear();
   }
-  render();
-  checkWin();
+  render(); saveState(); checkWin();
 }
 
 function checkWin(){
   for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(board[r][c]!==solution[r][c]) return;
   clearInterval(timerID);
+  localStorage.removeItem('sudoku_v1'); // clear saved state on win
   const d=diff.charAt(0).toUpperCase()+diff.slice(1);
   document.getElementById('win-stats').textContent=`${d} · ${fmtT(secs)}`;
   document.getElementById('win').classList.add('show');
 }
 
-// ── Keyboard support ───────────────────────────────────────────────
+// ── Keyboard ───────────────────────────────────────────────────────
 document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='z'){undo();return;}
   if(e.key>='1'&&e.key<='9'){inputNum(parseInt(e.key));return;}
   if(e.key==='Backspace'||e.key==='Delete'||e.key==='0'){inputNum(0);return;}
   if(e.key==='n'||e.key==='N'){toggleNotes();return;}
   if(!sel) return;
   const {r,c}=sel;
-  if(e.key==='ArrowUp'    &&r>0){sel={r:r-1,c};render();}
-  if(e.key==='ArrowDown'  &&r<8){sel={r:r+1,c};render();}
-  if(e.key==='ArrowLeft'  &&c>0){sel={r,c:c-1};render();}
-  if(e.key==='ArrowRight' &&c<8){sel={r,c:c+1};render();}
+  if(e.key==='ArrowUp'   &&r>0){sel={r:r-1,c};render();}
+  if(e.key==='ArrowDown' &&r<8){sel={r:r+1,c};render();}
+  if(e.key==='ArrowLeft' &&c>0){sel={r,c:c-1};render();}
+  if(e.key==='ArrowRight'&&c<8){sel={r,c:c+1};render();}
 });
 
 // ── Numpad ─────────────────────────────────────────────────────────
@@ -493,10 +591,13 @@ function toggleNotes(){
 }
 document.getElementById('btn-normal').addEventListener('click',()=>{notesMode=false;document.getElementById('btn-normal').classList.add('active');document.getElementById('btn-notes').classList.remove('active');});
 document.getElementById('btn-notes').addEventListener('click',()=>{notesMode=true;document.getElementById('btn-notes').classList.add('active');document.getElementById('btn-normal').classList.remove('active');});
+document.getElementById('btn-undo').addEventListener('click',undo);
 document.getElementById('btn-erase').addEventListener('click',()=>inputNum(0));
-document.getElementById('btn-new').addEventListener('click',()=>newGame());
-document.getElementById('win-btn').addEventListener('click',()=>newGame());
-document.querySelectorAll('.diff-btn').forEach(b=>b.addEventListener('click',()=>newGame(b.dataset.d)));
+document.getElementById('btn-new').addEventListener('click',()=>requestNewGame(diff));
+document.getElementById('win-btn').addEventListener('click',()=>requestNewGame(diff));
+document.querySelectorAll('.diff-btn').forEach(b=>b.addEventListener('click',()=>requestNewGame(b.dataset.d)));
+document.getElementById('confirm-yes').addEventListener('click',confirmYes);
+document.getElementById('confirm-no').addEventListener('click',()=>document.getElementById('confirm').classList.remove('show'));
 window.addEventListener('resize',()=>render());
 
 // ── Home screen icon ───────────────────────────────────────────────
@@ -526,7 +627,18 @@ window.addEventListener('resize',()=>render());
 
 // ── Start ──────────────────────────────────────────────────────────
 buildNumpad();
-window.addEventListener('load',()=>newGame('easy'));
+window.addEventListener('load',()=>{
+  if(loadState()){
+    // Resume saved game
+    document.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b.dataset.d===diff));
+    document.getElementById('btn-normal').classList.toggle('active',!notesMode);
+    document.getElementById('btn-notes').classList.toggle('active',notesMode);
+    timerID=setInterval(()=>{secs++;updateTimer();saveState();},1000);
+    render();
+  } else {
+    newGame('easy');
+  }
+});
 </script>
 </body>
 </html>
